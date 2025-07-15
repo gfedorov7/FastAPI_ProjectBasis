@@ -1,0 +1,35 @@
+services:
+  backend:
+    build: .
+    container_name: backend_basis
+    ports:
+      - "8919:8919"
+    env_file:
+      - .env.backend
+    networks:
+      - network-basis
+
+  db:
+    image: postgres:latest
+    container_name: postgres_basis
+    restart: always
+    env_file:
+      - .env.postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - network-basis
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  network-basis:
+    driver: bridge
+
+volumes:
+  pg_data:
