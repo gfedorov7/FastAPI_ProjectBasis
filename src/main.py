@@ -6,8 +6,6 @@ from src.exceptions import AppException
 
 app = FastAPI()
 
-setup_logging()
-
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException):
     return JSONResponse(
