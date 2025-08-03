@@ -1,4 +1,3 @@
-from src.types import ID
 
 
 class AppException(Exception):
