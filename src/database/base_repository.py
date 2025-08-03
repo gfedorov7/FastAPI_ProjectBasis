@@ -1,110 +1,73 @@
-from typing import Type, Sequence, Generic, Dict, Any
-import logging
+from typing import Generic, Type, Sequence, Dict, Any
 
-from sqlalchemy import select, func, Select
+from sqlalchemy import select, Result, func, exists, Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.types import ModelType, ID
-from src.exceptions import NotFoundError
-
-logger = logging.getLogger("app.database.base_repository")
+from src.types import ID, ModelType
+from src.exceptions import NotFoundRecord
 
 
 class BaseRepository(Generic[ModelType]):
-    def __init__(
-            self,
-            session: AsyncSession,
-            model: Type[ModelType],
-    ):
+    def __init__(self, session: AsyncSession, model: Type[ModelType]) -> None:
         self.session = session
         self.model = model
 
     async def get_by_id(self, id_: ID) -> ModelType:
-        logger.debug(f"Fetching {self.model.__name__} by ID: {id_}")
-        instance = await self._get_by_id(id_)
-        self._check_exists_instance(instance, id_)
-        logger.debug(f"Found {self.model.__name__} with ID: {id_}")
-        return instance
+        stmt = select(self.model).where(self.model.id == id_)
+        record_or_none: ModelType = await self._get_scalar(stmt=stmt)
 
-    async def get_all(self, offset: int = 0, limit: int = 10) -> Sequence[ModelType]:
-        logger.debug(f"Fetching all {self.model.__name__}s: offset={offset}, limit={limit}")
-        stmt = select(self.model).offset(offset).limit(limit)
-        return await self._get_all_results_from_query(stmt)
+        self._check_exists_element(record_or_none)
+
+        return record_or_none
+
+    async def get_all(self, limit: int = 10, offset: int = 0) -> Sequence[ModelType]:
+        stmt = select(self.model).limit(limit).offset(offset)
+        return await self._get_scalars(stmt=stmt)
 
     async def create(self, obj_in: Dict[str, Any]) -> ModelType:
-        logger.info(f"Creating new {self.model.__name__} with data: {obj_in}")
-        instance = self._add_to_session(obj_in)
-        await self._commit_and_refresh(instance)
-        logger.info(f"Created {self.model.__name__} with ID: {getattr(instance, 'id', 'N/A')}")
-        return instance
+        obj = self.model(**obj_in)
+        self.session.add(obj)
+        return obj
 
-    async def update(self, id_: ID, obj_update: Dict[str, Any]) -> ModelType:
-        logger.info(f"Updating {self.model.__name__} ID={id_} with data: {obj_update}")
+    async def update(self, id_: ID, obj_in: Dict[str, Any]) -> ModelType:
         instance = await self.get_by_id(id_)
-        instance = self._update_instance(instance, obj_update)
-        await self._commit_and_refresh(instance)
-        logger.info(f"Updated {self.model.__name__} ID={id_}")
-        return instance
+        return self._update_instance(instance, obj_in)
 
     async def delete(self, id_: ID) -> None:
-        logger.info(f"Deleting {self.model.__name__} with ID: {id_}")
-        instance = await self.get_by_id(id_)
-        await self.session.delete(instance)
-        await self.session.commit()
-        logger.info(f"Deleted {self.model.__name__} with ID: {id_}")
+        obj = await self.get_by_id(id_)
+        await self.session.delete(obj)
 
     async def exists(self, *conditions) -> bool:
-        logger.debug(f"Checking existence of {self.model.__name__} with conditions: {conditions}")
-        stmt = select(self.model).where(*conditions).limit(1)
-        instances = await self._get_all_results_from_query(stmt)
-        exists = self._condition_for_check_exists_instances(instances)
-        logger.debug(f"Existence check result for {self.model.__name__}: {exists}")
-        return exists
+        stmt = select(exists().where(*conditions))
+        return bool(await self._get_scalar(stmt=stmt))
 
     async def count(self, *conditions) -> int:
-        logger.debug(f"Counting {self.model.__name__}s with conditions: {conditions}")
-        stmt = select(func.count()).select_from(self.model).where(*conditions)
-        result = await self.session.execute(stmt)
-        count = result.scalar_one_or_none() or 0
-        logger.debug(f"Count result for {self.model.__name__}: {count}")
-        return count
+        stmt = select(func.count()).where(*conditions)
+        return await self._get_scalar(stmt=stmt) or 0
 
-    async def get_by_conditions(self, *conditions) -> Sequence[ModelType]:
-        logger.debug(f"Getting {self.model.__name__}s with conditions: {conditions}")
-        stmt = select(self.model).where(*conditions)
-        return await self._get_all_results_from_query(stmt)
+    async def get_by_conditions(self, *conditions, offset: int = 0, limit: int = 10) -> Sequence[ModelType]:
+        stmt = select(self.model).where(*conditions).offset(offset).limit(limit)
+        return await self._get_scalars(stmt=stmt)
 
-    async def _get_by_id(self, id_: ID) -> ModelType | None:
-        stmt = select(self.model).where(self.model.id == id_)
-        result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+    async def get_one_by_conditions(self, *conditions):
+        records = await self.get_by_conditions(*conditions, offset=0, limit=1)
+        self._check_exists_element(records)
+        return records[0]
 
-    def _check_exists_instance(self, instance: ModelType | None, id_: ID) -> None:
-        if instance is None:
-            logger.warning(f"{self.model.__name__} not found with ID {id_}")
-            raise NotFoundError(self.model.__name__, id_)
+    async def _get_scalar(self, stmt: Select) -> Any:
+        result: Result = await self.session.execute(stmt)
+        return result.scalar()
 
-    def _add_to_session(self, obj_in: Dict[str, Any]) -> ModelType:
-        instance = self.model(**obj_in)
-        self.session.add(instance)
-        return instance
+    def _check_exists_element(self, record: ModelType | Sequence[ModelType] | Sequence[None] | None) -> None:
+        if not record:
+            raise NotFoundRecord(self.model.__name__)
 
-    async def _commit_and_refresh(self, instance: ModelType | None) -> None:
-        await self.session.commit()
-        if instance:
-            await self.session.refresh(instance)
-
-    @staticmethod
-    def _update_instance(instance: ModelType, obj_update: Dict[str, Any]) -> ModelType:
-        for key, value in obj_update.items():
-            if value is not None:
-                setattr(instance, key, value)
-        return instance
-
-    @staticmethod
-    def _condition_for_check_exists_instances(instances: Sequence[ModelType]) -> bool:
-        return len(instances) != 0
-
-    async def _get_all_results_from_query(self, stmt: Select) -> Sequence[ModelType]:
-        result = await self.session.execute(stmt)
+    async def _get_scalars(self, stmt: Select):
+        result: Result = await self.session.execute(stmt)
         return result.scalars().all()
+
+    @staticmethod
+    def _update_instance(instance: ModelType, obj_in: Dict[str, Any]) -> ModelType:
+        for key, value in obj_in.items():
+            setattr(instance, key, value)
+        return instance
