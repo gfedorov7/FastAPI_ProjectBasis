@@ -12,4 +12,4 @@ echo "Database is available, run migrations"
 alembic upgrade head
 
 echo "Start uvicorn"
-exec uvicorn src.main:app --host 0.0.0.0 --port 8919 --reload
+exec uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload

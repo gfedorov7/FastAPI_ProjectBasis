@@ -3,32 +3,79 @@ services:
     build: .
     container_name: backend_basis
     ports:
-      - "8919:8919"
+      - "8000:8000"
     env_file:
-      - .env.backend
+      - .env
     networks:
-      - network-basis
+      - basis-network
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
 
   db:
     image: postgres:latest
-    container_name: postgres_basis
+    container_name: db_basis
     restart: always
     env_file:
-      - .env.postgres
+      - .env
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     networks:
-      - network-basis
+      - basis-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis_basis
+    ports:
+      - "6379:6379"
+    networks:
+      - basis-network
+    restart: unless-stopped
+
+  celery:
+    build: .
+    container_name: celery_basis
+    command: celery -A src.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - basis-network
+    restart: unless-stopped
+
+  celery-beat:
+    build: .
+    container_name: celery_beat_basis
+    command: celery -A src.celery_app beat --loglevel=info
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - basis-network
+    restart: unless-stopped
+
 networks:
-  network-basis:
+  basis-network:
     driver: bridge
 
 volumes:
