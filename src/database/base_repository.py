@@ -3,9 +3,12 @@ from typing import Generic, Type, Sequence, Dict, Any
 from sqlalchemy import select, Result, func, exists, Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.logs import setup_logger
 from src.types import ID, ModelType
 from src.exceptions import NotFoundRecord
 
+
+logger = setup_logger(__name__)
 
 class BaseRepository(Generic[ModelType]):
     def __init__(self, session: AsyncSession, model: Type[ModelType]) -> None:
@@ -13,6 +16,7 @@ class BaseRepository(Generic[ModelType]):
         self.model = model
 
     async def get_by_id(self, id_: ID) -> ModelType:
+        logger.debug(f"start get by id: {id_}") # example for use logger
         stmt = select(self.model).where(self.model.id == id_)
         record_or_none: ModelType = await self._get_scalar(stmt=stmt)
 
@@ -49,10 +53,9 @@ class BaseRepository(Generic[ModelType]):
         stmt = select(self.model).where(*conditions).offset(offset).limit(limit)
         return await self._get_scalars(stmt=stmt)
 
-    async def get_one_by_conditions(self, *conditions):
+    async def get_one_by_conditions(self, *conditions) -> ModelType | None:
         records = await self.get_by_conditions(*conditions, offset=0, limit=1)
-        self._check_exists_element(records)
-        return records[0]
+        return records[0] if records else None
 
     async def _get_scalar(self, stmt: Select) -> Any:
         result: Result = await self.session.execute(stmt)
@@ -60,6 +63,7 @@ class BaseRepository(Generic[ModelType]):
 
     def _check_exists_element(self, record: ModelType | Sequence[ModelType] | Sequence[None] | None) -> None:
         if not record:
+            logger.error(f"not found record")  # example for use logger
             raise NotFoundRecord(self.model.__name__)
 
     async def _get_scalars(self, stmt: Select):
