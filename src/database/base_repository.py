@@ -75,3 +75,4 @@ class BaseRepository(Generic[ModelType]):
         for key, value in obj_in.items():
             setattr(instance, key, value)
         return instance
+    
