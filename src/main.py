@@ -2,7 +2,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from src.exceptions import AppException
-from src.logs import setup_logging
 
 
 app = FastAPI()
