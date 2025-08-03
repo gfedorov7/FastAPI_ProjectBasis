@@ -1,35 +1,26 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class DataBaseSettings(BaseSettings):
-    database_url: str
-    database_echo: bool
-
+class CommonSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env.backend",
         extra="allow"
     )
 
-class TokenSettings(BaseSettings):
+class DataBaseSettings(CommonSettings):
+    database_url: str
+    database_echo: bool
+
+class TokenSettings(CommonSettings):
     secret_key: str
     token_algorithm: str
     token_expires: int
     token_type: str
 
-    model_config = SettingsConfigDict(
-        env_file=".env.backend",
-        extra="allow"
-    )
-
-class CelerySettings(BaseSettings):
+class CelerySettings(CommonSettings):
     celery_app_name: str
     celery_broker_url: str
     celery_backend_url: str
-
-    model_config = SettingsConfigDict(
-        env_file=".env.backend",
-        extra="allow"
-    )
 
 class Settings:
     database_settings: DataBaseSettings = DataBaseSettings()
