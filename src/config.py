@@ -6,7 +6,7 @@ class DataBaseSettings(BaseSettings):
     database_echo: bool
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=".env.backend",
         extra="allow"
     )
 
@@ -17,7 +17,7 @@ class TokenSettings(BaseSettings):
     token_type: str
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=".env.backend",
         extra="allow"
     )
 
@@ -27,7 +27,7 @@ class CelerySettings(BaseSettings):
     celery_backend_url: str
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=".env.backend",
         extra="allow"
     )
 
