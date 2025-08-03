@@ -7,7 +7,8 @@ class AppException(Exception):
         self.status_code = status_code
         super().__init__(message)
 
-class NotFoundError(AppException):
-    def __init__(self, model_name: str, entity_id: ID):
-        message = f"{model_name} with ID {entity_id} not found"
-        super().__init__(message, status_code=404)
+class NotFoundRecord(AppException):
+    def __init__(self, model: str):
+        message = f"Not found record in model {model}"
+        status_code = 404
+        super().__init__(message, status_code)
